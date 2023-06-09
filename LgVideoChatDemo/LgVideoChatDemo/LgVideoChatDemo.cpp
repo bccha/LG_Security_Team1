@@ -17,6 +17,7 @@
 #include "DisplayImage.h"
 #include "VideoClient.h"
 #include "litevad.h"
+#include "Crypto.h"
 
 #pragma comment(lib,"comctl32.lib")
 #ifdef _DEBUG
@@ -41,6 +42,10 @@
 #define IDC_VAD_STATE_STATUS   1019
 #define IDC_CHECKBOX_AEC       1020 
 #define IDC_CHECKBOX_NS        1021
+#define IDC_EDIT_ID            1022
+#define IDC_EDIT_PASSWORD      1023
+#define IDM_LOGIN              1024
+#define IDD_LOGIN_POPUP        1025
 // Global Variables:
 
 HWND hWndMain;
@@ -58,6 +63,9 @@ static bool Loopback=false;
 static FILE* pCout = NULL;
 static HWND hWndMainToolbar;
 static HWND hWndEdit;
+
+char UserId[512] = "";
+char UserPw[512] = "";
 
 // Forward declarations of functions included in this code module:
 static ATOM                MyRegisterClass(HINSTANCE hInstance);
@@ -77,6 +85,7 @@ static void SetHostAddr(void);
 static void SetStdOutToNewConsole(void);
 static void DisplayMessageOkBox(const char* Msg);
 static bool OnlyOneInstance(void);
+static void OnLogin(HWND hWnd);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -255,6 +264,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
     case WM_COMMAND:
         {
              int wmId = LOWORD(wParam);
+             HWND hPopup;
             // Parse the menu selections:
             switch (wmId)
             {
@@ -350,7 +360,14 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 //EnableWindow(GetDlgItem(hWnd, IDC_CHECKBOX_NS), true);
                 OnStopServer(hWnd, message, wParam, lParam);
                 break;
-
+            case IDM_LOGIN:
+                HWND hLoginWnd;
+                hLoginWnd = GetDlgItem(hWnd, IDC_EDIT_ID);
+                GetWindowTextA(hLoginWnd, UserId, sizeof(UserId));
+                hLoginWnd = GetDlgItem(hWnd, IDC_EDIT_PASSWORD);
+                GetWindowTextA(hLoginWnd, UserPw, sizeof(UserPw));
+                OnLogin(hWnd);
+                break;
             default:
                 return DefWindowProc(hWnd, message, wParam, lParam);
             }
@@ -449,7 +466,7 @@ HWND CreateSimpleToolbar(HWND hWndParent)
 {
     // Declare and initialize local constants.
     const int ImageListID = 0;
-    const int numButtons = 4;
+    const int numButtons = 5;
     const int bitmapSize = 16;
 
     const DWORD buttonStyles = BTNS_AUTOSIZE;
@@ -486,7 +503,8 @@ HWND CreateSimpleToolbar(HWND hWndParent)
         { MAKELONG(VIEW_NETCONNECT,    ImageListID), IDM_CONNECT,     TBSTATE_ENABLED,       buttonStyles, {0}, 0, (INT_PTR)L"Connect" },
         { MAKELONG(VIEW_NETDISCONNECT, ImageListID), IDM_DISCONNECT,  TBSTATE_INDETERMINATE, buttonStyles, {0}, 0, (INT_PTR)L"Disconnect"},
         { MAKELONG(VIEW_NETCONNECT,    ImageListID), IDM_START_SERVER,TBSTATE_ENABLED,       buttonStyles, {0}, 0, (INT_PTR)L"Start Server"},
-        { MAKELONG(VIEW_NETDISCONNECT, ImageListID), IDM_STOP_SERVER, TBSTATE_INDETERMINATE, buttonStyles, {0}, 0, (INT_PTR)L"Stop Server"}
+        { MAKELONG(VIEW_NETDISCONNECT, ImageListID), IDM_STOP_SERVER, TBSTATE_INDETERMINATE, buttonStyles, {0}, 0, (INT_PTR)L"Stop Server"},
+        { MAKELONG(VIEW_NETCONNECT,    ImageListID), IDM_LOGIN ,      TBSTATE_ENABLED,       buttonStyles, {0}, 0, (INT_PTR)L"Login"}
     };
 
     // Add buttons.
@@ -536,6 +554,38 @@ static LRESULT OnCreate(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         130, 50, 120, 20,
         hWnd,
         (HMENU)IDC_EDIT_REMOTE,
+        ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+
+    CreateWindow(_T("STATIC"),
+        _T("ID"),
+        WS_VISIBLE | WS_CHILD,
+        420, 50, 20, 20,
+        hWnd,
+        (HMENU)IDC_VAD_STATE_STATUS,
+        ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+
+    CreateWindowExA(WS_EX_CLIENTEDGE,
+        "EDIT", UserId,
+        WS_CHILD | WS_VISIBLE,
+        450, 50, 120, 20,
+        hWnd,
+        (HMENU)IDC_EDIT_ID,
+        ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+
+    CreateWindow(_T("STATIC"),
+        _T("PW"),
+        WS_VISIBLE | WS_CHILD,
+        590, 50, 30, 20,
+        hWnd,
+        (HMENU)IDC_VAD_STATE_STATUS,
+        ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+
+    CreateWindowExA(WS_EX_CLIENTEDGE,
+        "EDIT", UserPw,
+        WS_CHILD | WS_VISIBLE,
+        630, 50, 120, 20,
+        hWnd,
+        (HMENU)IDC_EDIT_PASSWORD,
         ((LPCREATESTRUCT)lParam)->hInstance, NULL);
 
     if (Loopback)  checked = BST_CHECKED;
@@ -697,6 +747,23 @@ static void DisplayMessageOkBox(const char* Msg)
     }
 
 }
+
+static void OnLogin(HWND hWnd)
+{
+    int result = 0;
+    CryptoTest();
+    if (!strlen(UserId) || !strlen(UserPw)) result = 1;
+
+    if (!result) {
+        MessageBox(hWnd, L"로그인 정보 확인", L"로그인 결과", MB_OK | MB_ICONINFORMATION);
+    }
+    else {
+        MessageBox(hWnd, L"로그인 취소", L"로그인 결과", MB_OK | MB_ICONINFORMATION);
+    }
+
+
+}
+
 static bool OnlyOneInstance(void)
 {
     HANDLE m_singleInstanceMutex = CreateMutex(NULL, TRUE, L"F2CBD5DE-2AEE-4BDA-8C56-D508CFD3F4DE");
