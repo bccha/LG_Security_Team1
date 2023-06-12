@@ -751,7 +751,7 @@ static void DisplayMessageOkBox(const char* Msg)
 static void OnLogin(HWND hWnd)
 {
     int result = 0;
-    CryptoTest();
+    CryptoInitialize();
     if (!strlen(UserId) || !strlen(UserPw)) result = 1;
 
     if (!result) {
