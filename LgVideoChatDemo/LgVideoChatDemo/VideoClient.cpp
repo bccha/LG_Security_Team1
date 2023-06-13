@@ -12,10 +12,13 @@
 #include "Camera.h"
 #include "TcpSendRecv.h"
 #include "DisplayImage.h"
+#include "Crypto.h"
 
 
 enum InputMode { ImageSize, Image };
 static  std::vector<uchar> sendbuff;//buffer for coding
+static  std::vector<uchar> encryptedSendbuff;//buffer for Encryption
+static  std::vector<uchar> decryptedRecvbuff;//buffer for Decryption
 static HANDLE hClientEvent=INVALID_HANDLE_VALUE;
 static HANDLE hEndVideoClientEvent=INVALID_HANDLE_VALUE;
 static HANDLE hTimer = INVALID_HANDLE_VALUE;
@@ -219,6 +222,7 @@ static DWORD WINAPI ThreadVideoClient(LPVOID ivalue)
                  {
                    int iResult;
                    iResult = ReadDataTcpNoBlock(Client, (unsigned char*)InputBufferWithOffset, InputBytesNeeded);
+                   std::cout << "Client iResult:" << iResult << std::endl;
                    if (iResult != SOCKET_ERROR)
                    {
                        if (iResult == 0)
@@ -256,11 +260,18 @@ static DWORD WINAPI ThreadVideoClient(LPVOID ivalue)
                                }
                                else if (Mode == Image)
                                {
+                                   size_t decrypted_size = 0;
                                    Mode = ImageSize;
                                    InputBytesNeeded = sizeof(unsigned int);
                                    InputBufferWithOffset = InputBuffer;
-                                   cv::imdecode(cv::Mat(SizeofImage, 1, CV_8UC1, InputBuffer), cv::IMREAD_COLOR, &ImageIn);
+                                   if (!AesDecryptForRecieve((const unsigned char*)InputBuffer, SizeofImage,
+                                       &decryptedRecvbuff, &decrypted_size)) {
+                                       std::cout << "Client decryption failed";
+                                   }
+                                   std::cout << "Client Decrypted size:" << decrypted_size  << std::endl;
+                                   cv::imdecode(cv::Mat(SizeofImage, 1, CV_8UC1, decryptedRecvbuff.data()), cv::IMREAD_COLOR, &ImageIn);
                                    DispayImage(ImageIn);
+                                   decryptedRecvbuff.clear();
                                }
                            }
 
@@ -304,27 +315,35 @@ static DWORD WINAPI ThreadVideoClient(LPVOID ivalue)
      else if (dwEvent == WAIT_OBJECT_0 + 2)
       {
          unsigned int numbytes;
+         size_t encyprted_size = 0;
 
          if (!GetCameraFrame(sendbuff))
          {
              std::cout << "Camera Frame Empty" << std::endl;
          }
-         numbytes = htonl((unsigned long)sendbuff.size());
+         if (!AesEncryptForSend(sendbuff.data(), sendbuff.size(),
+             &encryptedSendbuff, (size_t*)&encyprted_size))
+         {
+             std::cout << "Client encryption failed" << std::endl;
+         }
+         std::cout << "Client Encrypted_Size: " << encyprted_size <<" buffsize:"<< encryptedSendbuff.size() << std::endl;
+         numbytes = htonl((unsigned long)encryptedSendbuff.size());
          if (WriteDataTcp(Client, (unsigned char*)&numbytes, sizeof(numbytes)) == sizeof(numbytes))
          {
-             if (WriteDataTcp(Client, (unsigned char*)sendbuff.data(), (int)sendbuff.size()) != sendbuff.size())
+             if (WriteDataTcp(Client, (unsigned char*)encryptedSendbuff.data(), (int)encryptedSendbuff.size()) != encryptedSendbuff.size())
              {
-                 std::cout << "WriteDataTcp sendbuff.data() Failed " << WSAGetLastError() << std::endl;
+                 std::cout << "WriteDataTcp encryptedSendbuff.data() Failed " << WSAGetLastError() << std::endl;
                  PostMessage(hWndMain, WM_CLIENT_LOST, 0, 0);
                  break;
              }
          }
          else
          {
-             std::cout << "WriteDataTcp sendbuff.size() Failed " << WSAGetLastError() << std::endl;
+             std::cout << "WriteDataTcp encryptedSendbuff.size() Failed " << WSAGetLastError() << std::endl;
              PostMessage(hWndMain, WM_CLIENT_LOST, 0, 0);
              break;
          }
+         encryptedSendbuff.clear();
       }
      }
     if (InputBuffer)
