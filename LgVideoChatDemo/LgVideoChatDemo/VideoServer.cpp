@@ -12,8 +12,11 @@
 #include "TcpSendRecv.h"
 #include "DisplayImage.h"
 #include "Camera.h"
+#include "Crypto.h"
 
 static  std::vector<uchar> sendbuff;//buffer for coding
+static  std::vector<uchar> encryptedSendbuff;//buffer for Encryption
+static  std::vector<uchar> decryptedRecvbuff;//buffer for Decryption
 enum InputMode { ImageSize, Image };
 static HANDLE hAcceptEvent=INVALID_HANDLE_VALUE;
 static HANDLE hListenEvent = INVALID_HANDLE_VALUE;
@@ -307,6 +310,7 @@ static DWORD WINAPI ThreadVideoServer(LPVOID ivalue)
                          buffer = new (std::nothrow) unsigned char[bytesAvailable];
                          //std::cout << "FD_READ "<< bytesAvailable << std::endl;
                          iResult = ReadDataTcpNoBlock(Accept, buffer, bytesAvailable);
+                         std::cout << "Server iResult:" << iResult << std::endl;
                          if (iResult > 0)
                          {
                              bytestosend = iResult;
@@ -367,10 +371,16 @@ static DWORD WINAPI ThreadVideoServer(LPVOID ivalue)
                                  }
                                  else if (Mode == Image)
                                  {
+                                     size_t decrypted_size = 0;
                                      Mode = ImageSize;
                                      InputBytesNeeded = sizeof(unsigned int);
                                      InputBufferWithOffset = InputBuffer;
-                                     cv::imdecode(cv::Mat(SizeofImage, 1, CV_8UC1, InputBuffer), cv::IMREAD_COLOR, &ImageIn);
+                                     if (!AesDecryptForRecieve((const unsigned char*)InputBuffer, SizeofImage,
+                                         &decryptedRecvbuff, &decrypted_size)) {
+                                         std::cout << "Server decryption failed";
+                                     }
+                                     std::cout << "Server Decrypted size:" << decrypted_size << std::endl;
+                                     cv::imdecode(cv::Mat(SizeofImage, 1, CV_8UC1, decryptedRecvbuff.data()), cv::IMREAD_COLOR, &ImageIn);
                                      DispayImage(ImageIn);
                                  }
                              }
@@ -413,24 +423,33 @@ static DWORD WINAPI ThreadVideoServer(LPVOID ivalue)
      else if (dwEvent == WAIT_OBJECT_0 + 3)
        {
              unsigned int numbytes;
+             size_t encyprted_size = 0;
 
              if (!GetCameraFrame(sendbuff))
              {
                  std::cout << "Camera Frame Empty" << std::endl;
              }
-             numbytes = htonl((unsigned long)sendbuff.size());
+             if (!AesEncryptForSend(sendbuff.data(), sendbuff.size(),
+                 &encryptedSendbuff, (size_t*)&encyprted_size))
+             {
+                 std::cout << "Server encryption failed" << std::endl;
+             }
+             std::cout << "Server Encrypted_Size: " << encyprted_size << " buffsize:" << encryptedSendbuff.size() << std::endl;
+             numbytes = htonl((unsigned long)encryptedSendbuff.size());
              if (WriteDataTcp(Accept, (unsigned char*)&numbytes, sizeof(numbytes)) == sizeof(numbytes))
              {
-                 if (WriteDataTcp(Accept, (unsigned char*)sendbuff.data(), (int)sendbuff.size()) != sendbuff.size())
+                 if (WriteDataTcp(Accept, (unsigned char*)encryptedSendbuff.data(), (int)encryptedSendbuff.size()) != sendbuff.size())
                  {
-                     std::cout << "WriteDataTcp sendbuff.data() Failed " << WSAGetLastError() << std::endl;
+                     std::cout << "WriteDataTcp encryptedSendbuff.data() Failed " << WSAGetLastError() << std::endl;
                      CleanUpClosedConnection();
                  }
              }
-             else {
-                   std::cout << "WriteDataTcp sendbuff.size() Failed " << WSAGetLastError() << std::endl;
+             else 
+             {
+                   std::cout << "WriteDataTcp encryptedSendbuff.size() Failed " << WSAGetLastError() << std::endl;
                    CleanUpClosedConnection();
-                  }
+             }
+             encryptedSendbuff.clear();
        }
      
 

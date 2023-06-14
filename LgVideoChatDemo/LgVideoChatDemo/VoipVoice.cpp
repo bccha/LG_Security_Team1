@@ -17,6 +17,7 @@
 #include <strsafe.h>
 #include <conio.h>
 #include <iostream>
+#include <vector>
 #include "VoipVoice.h"
 #include "LgVideoChatDemo.h"
 #include "mediabuf.h"
@@ -28,6 +29,7 @@
 #include "litevad.h"
 #include <avrt.h>
 #include < mutex >
+#include "Crypto.h"
 
 #include "..\\opus-1.3.1\\include\opus.h"
 #pragma comment(lib, "avrt.lib")
@@ -414,7 +416,7 @@ static DWORD WINAPI CaptureMicThread(LPVOID ivalue)
     MicInputBufferStruct.pBuffer = &micInputBuffer;
     int BytesPerFrame;
     int NumberOfFramestoSend;
-
+    
     ULONG cbProduced = 0;
     DWORD dwStatus;
 
@@ -436,6 +438,9 @@ static DWORD WINAPI CaptureMicThread(LPVOID ivalue)
     HANDLE currProcess;
     BOOL iRet;
     DMO_MEDIA_TYPE mt = { 0 };
+
+    size_t encyprted_size = 0;
+    std::vector<unsigned char> encryptedSendbuff;//buffer for Encryption
 
     // Set DMO output format
     hr = MoInitMediaType(&mt, sizeof(WAVEFORMATEX));
@@ -743,7 +748,16 @@ static DWORD WINAPI CaptureMicThread(LPVOID ivalue)
                     for (int j = 0; j < FRAMES_PER_BUFFER; j++)
                         in[j] = pcm_in[2 * j + 1] << 8 | pcm_in[2 * j];
                     nbBytes = opus_encode(encoder, in, FRAMES_PER_BUFFER, cbits, BYTES_PER_BUFFER);
-                    SendUdpVoipData((const char*)cbits, nbBytes);
+
+                    if (!AesEncryptForSend(cbits, nbBytes,
+                        &encryptedSendbuff, (size_t*)&encyprted_size))
+                    {
+                        std::cout << "Audio encryption failed" << std::endl;
+                    }
+                    std::cout << "Encrypted Audio Send :" << encyprted_size << std::endl;
+                    SendUdpVoipData((const char*)encryptedSendbuff.data(), encryptedSendbuff.size());
+                    encryptedSendbuff.clear();
+                    //SendUdpVoipData((const char*)cbits, nbBytes);
                 }
             }
         } while (MicInputBufferStruct.dwStatus & DMO_OUTPUT_DATA_BUFFERF_INCOMPLETE);
@@ -775,6 +789,9 @@ static DWORD WINAPI UdpRecievingWaitingThread(LPVOID ivalue)
     static char Buffer[1024 * 5];
     int slen = sizeof(RemoteAddrIn);
     int BytesIn;
+
+    size_t decrypted_size = 0;
+    static  std::vector<unsigned char> decryptedRecvbuff;//buffer for Decryption
     SetUpUdpVoipReceiveEventForThread();
     std::cout << "Udp Recv started" << '\n';
     while (1) {
@@ -787,6 +804,11 @@ static DWORD WINAPI UdpRecievingWaitingThread(LPVOID ivalue)
             else
             {
                 int index;
+                if (!AesDecryptForRecieve((const unsigned char*)Buffer, BytesIn,
+                    &decryptedRecvbuff, &decrypted_size)) {
+                    std::cout << "Client decryption failed";
+                }
+                std::cout << "Decrypted Audio Recv :" << decrypted_size << std::endl;
                 EnterCriticalSection(&CriticalSection);
                 index = VoipBufferQueue.push();
                 if (index != -1)
@@ -794,7 +816,7 @@ static DWORD WINAPI UdpRecievingWaitingThread(LPVOID ivalue)
                     int frame_size;                    
                     static unsigned char pcm_bytes[BYTES_PER_BUFFER];
                     static opus_int16 out[FRAMES_PER_BUFFER];
-                    frame_size = opus_decode(decoder,(unsigned char *) Buffer, BytesIn, out, FRAMES_PER_BUFFER, 0);
+                    frame_size = opus_decode(decoder,(unsigned char *)decryptedRecvbuff.data(), decryptedRecvbuff.size(), out, FRAMES_PER_BUFFER, 0);
                     for (int j = 0; j < FRAMES_PER_BUFFER; j++)
                     {
                         pcm_bytes[2 * j] = out[j] & 0xFF;
@@ -806,6 +828,7 @@ static DWORD WINAPI UdpRecievingWaitingThread(LPVOID ivalue)
                 else
                     std::cout << "VoipBufferQueue Full" << '\n';
                 LeaveCriticalSection(&CriticalSection);
+                decryptedRecvbuff.clear();
             }
         }
         else

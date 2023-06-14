@@ -8,6 +8,7 @@
 #define BUFFER_SIZE 64*1024
 #define IV_SIZE 16
 
+std::string g_recieved_rsa_pub_key;
 std::string g_rsa_pub_key;
 EVP_PKEY* g_rsa_key;
 unsigned char g_aes_key[32];
@@ -40,13 +41,7 @@ EVP_PKEY* GenerateRsaKey(std::string& pubkey) {
         std::cout << "Error setting keygen bits" << std::endl;
         goto free_all;
     }
-/*
-    ret = EVP_PKEY_CTX_set_rsa_keygen_pubexp(ctx, BN_new());
-    if (ret != 1) {
-        std::cout << "Error setting keygen pubexp" << std::endl;
-        goto free_all;
-    }
-*/
+
     e = BN_new();
     BN_set_word(e, RSA_F4);
     EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_KEYGEN, EVP_PKEY_CTRL_RSA_KEYGEN_PUBEXP, 0, e);
@@ -129,9 +124,6 @@ void encryptWithPublicKey(const std::string& publicKey, const unsigned char* msg
     if (EVP_PKEY_encrypt(ctx, encrypted_msg, encrypted_msg_len, msg, msg_len) <= 0)
     {
         std::cout << "Failed to encrypt" << std::endl;
-        //char buffer[120];
-        //ERR_error_string(ERR_get_error(), buffer);
-        //throw std::runtime_error("Error encrypting message: " + std::string(buffer));
     }
     //*encrypted_msg_len = encryptedLen;
     std::cout << "encrypted_msg_len:" << *encrypted_msg_len << std::endl;
@@ -357,4 +349,31 @@ void CryptoTest() {
     std::cout << "Decrypted message: " << decrypted_msg << std::endl;
 
     EVP_PKEY_free(rsa_key);
+}
+
+bool SetRecievedRsaPublicKey(std::string publickey)
+{
+    if (!publickey.length()) return false;
+    g_recieved_rsa_pub_key = publickey;
+    return true;
+}
+
+bool GenerateEncryptedKeyData(unsigned char* encrypted_key_data, size_t* encrypted_key_data_size)
+{
+     /*
+     * | 32byte aes key | 256byte public key | 256byte recieved public key |
+     * Total 544byte
+     */
+    if (!encrypted_key_data) return false;
+    if (!g_recieved_rsa_pub_key.length()) return false;
+
+    std::vector<unsigned char> key_data(g_aes_key, g_aes_key + sizeof(g_aes_key));
+    key_data.insert(key_data.end(), g_rsa_pub_key.data(), g_rsa_pub_key.data() + g_rsa_pub_key.length());
+    key_data.insert(key_data.end(), g_recieved_rsa_pub_key.data(),
+        g_recieved_rsa_pub_key.data() + g_recieved_rsa_pub_key.length());
+    std::cout << "key_data length:" << key_data.size() << std::endl;
+    encryptWithPublicKey(g_recieved_rsa_pub_key, (const unsigned char*)g_recieved_rsa_pub_key.data(),
+        g_recieved_rsa_pub_key.length(), encrypted_key_data, encrypted_key_data_size);
+
+    return true;
 }
