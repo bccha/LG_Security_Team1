@@ -138,6 +138,7 @@
     <ClInclude Include="litevad.h" />
     <ClInclude Include="mediabuf.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="RESTful.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="TcpSendRecv.h" />
     <ClInclude Include="VideoClient.h" />
@@ -152,6 +153,7 @@
     <ClCompile Include="DisplayImage.cpp" />
     <ClCompile Include="LgVideoChatDemo.cpp" />
     <ClCompile Include="litevad.cpp" />
+    <ClCompile Include="RESTful.cpp" />
     <ClCompile Include="TcpSendRecv.cpp" />
     <ClCompile Include="VideoClient.cpp" />
     <ClCompile Include="VideoServer.cpp" />

@@ -17,6 +17,7 @@
 #include "DisplayImage.h"
 #include "VideoClient.h"
 #include "litevad.h"
+#include "RESTful.h"
 
 #pragma comment(lib,"comctl32.lib")
 #ifdef _DEBUG
@@ -41,6 +42,7 @@
 #define IDC_VAD_STATE_STATUS   1019
 #define IDC_CHECKBOX_AEC       1020 
 #define IDC_CHECKBOX_NS        1021
+#define IDM_LOGIN              1022
 // Global Variables:
 
 HWND hWndMain;
@@ -64,6 +66,7 @@ static ATOM                MyRegisterClass(HINSTANCE hInstance);
 static BOOL                InitInstance(HINSTANCE, int);
 static LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 static INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
+static INT_PTR CALLBACK    Login(HWND, UINT, WPARAM, LPARAM);
 
 
 static LRESULT OnCreate(HWND, UINT, WPARAM, LPARAM);
@@ -350,6 +353,9 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM l
                 //EnableWindow(GetDlgItem(hWnd, IDC_CHECKBOX_NS), true);
                 OnStopServer(hWnd, message, wParam, lParam);
                 break;
+            case IDM_LOGIN:
+                DialogBox(hInst, MAKEINTRESOURCE(IDD_LOGINBOX), hWnd, Login);
+                break;
             default:
                 return DefWindowProc(hWnd, message, wParam, lParam);
             }
@@ -442,13 +448,36 @@ static INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
     }
     return (INT_PTR)FALSE;
 }
+
+// Message handler for login box.
+static INT_PTR CALLBACK Login(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    UNREFERENCED_PARAMETER(lParam);
+    switch (message)
+    {
+    case WM_INITDIALOG:
+        return (INT_PTR)TRUE;
+
+    case WM_COMMAND:
+        if (LOWORD(wParam) == IDOK)
+        {
+            LoginFromApp(hDlg, LocalIpAddress);
+
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+        break;
+    }
+    return (INT_PTR)FALSE;
+}
+
 HIMAGELIST g_hImageList = NULL;
 
 HWND CreateSimpleToolbar(HWND hWndParent)
 {
     // Declare and initialize local constants.
     const int ImageListID = 0;
-    const int numButtons = 4;
+    const int numButtons = 5;
     const int bitmapSize = 16;
 
     const DWORD buttonStyles = BTNS_AUTOSIZE;
@@ -485,7 +514,8 @@ HWND CreateSimpleToolbar(HWND hWndParent)
         { MAKELONG(VIEW_NETCONNECT,    ImageListID), IDM_CONNECT,     TBSTATE_ENABLED,       buttonStyles, {0}, 0, (INT_PTR)L"Connect" },
         { MAKELONG(VIEW_NETDISCONNECT, ImageListID), IDM_DISCONNECT,  TBSTATE_INDETERMINATE, buttonStyles, {0}, 0, (INT_PTR)L"Disconnect"},
         { MAKELONG(VIEW_NETCONNECT,    ImageListID), IDM_START_SERVER,TBSTATE_ENABLED,       buttonStyles, {0}, 0, (INT_PTR)L"Start Server"},
-        { MAKELONG(VIEW_NETDISCONNECT, ImageListID), IDM_STOP_SERVER, TBSTATE_INDETERMINATE, buttonStyles, {0}, 0, (INT_PTR)L"Stop Server"}
+        { MAKELONG(VIEW_NETDISCONNECT, ImageListID), IDM_STOP_SERVER, TBSTATE_INDETERMINATE, buttonStyles, {0}, 0, (INT_PTR)L"Stop Server"},
+        { MAKELONG(VIEW_NETCONNECT,    ImageListID), IDM_LOGIN,       TBSTATE_ENABLED,       buttonStyles, {0}, 0, (INT_PTR)L"Login"}
     };
 
     // Add buttons.
