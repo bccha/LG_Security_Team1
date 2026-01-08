@@ -41,7 +41,7 @@ pypng==0.0.21
 PyQRCode==1.2.1
 pytest==7.1.1
 python-dotenv==0.20.0
-python-jose==3.3.0
+python-jose==3.4.0
 python-multipart==0.0.5
 PyYAML==6.0
 requests==2.31.0
