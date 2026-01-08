@@ -19,7 +19,7 @@ emoji==1.7.0
 fastapi==0.97.0
 filelock==3.6.0
 greenlet==1.1.2
-h11==0.13.0
+h11==0.16.0
 identify==2.4.12
 idna==3.3
 iniconfig==1.1.1
